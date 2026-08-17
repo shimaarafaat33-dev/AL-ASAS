@@ -1,14 +1,13 @@
-// Cloud Database & Production Synchronization Engine for Al-Asas Platform
+// Central Production Cloud Database Synchronization Engine for Al-Asas Platform
+// Connects Admin Dashboard directly to Student Website across all devices globally
 
 const CLOUD_CONFIG_KEY = 'alasas_cloud_config';
 
-// Default resilient cloud storage configuration
-// Uses a cloud REST database endpoint that works in any Production environment worldwide
+// Default configuration
 const DEFAULT_CLOUD_CONFIG = {
   enabled: true,
-  provider: 'firebase_rest', // 'firebase_rest' | 'custom_rest' | 'jsonbin'
-  // Default public read / authenticated cloud endpoint
-  apiUrl: 'https://alasas-platform-default-rtdb.firebaseio.com/alasas_production_data.json',
+  provider: 'firebase_rest', // 'firebase_rest' | 'custom_rest'
+  apiUrl: '', // e.g. https://your-project-id.firebaseio.com/alasas_data.json
   apiKey: '',
   syncIntervalSeconds: 45,
   lastSyncTime: null,
@@ -17,8 +16,13 @@ const DEFAULT_CLOUD_CONFIG = {
 
 export const getCloudConfig = () => {
   try {
-    const stored = localStorage.getItem(CLOUD_CONFIG_KEY);
-    return stored ? { ...DEFAULT_CLOUD_CONFIG, ...JSON.parse(stored) } : DEFAULT_CLOUD_CONFIG;
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const stored = localStorage.getItem(CLOUD_CONFIG_KEY);
+      if (stored) {
+        return { ...DEFAULT_CLOUD_CONFIG, ...JSON.parse(stored) };
+      }
+    }
+    return DEFAULT_CLOUD_CONFIG;
   } catch (e) {
     return DEFAULT_CLOUD_CONFIG;
   }
@@ -27,7 +31,9 @@ export const getCloudConfig = () => {
 export const saveCloudConfig = (config) => {
   try {
     const updated = { ...getCloudConfig(), ...config };
-    localStorage.setItem(CLOUD_CONFIG_KEY, JSON.stringify(updated));
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem(CLOUD_CONFIG_KEY, JSON.stringify(updated));
+    }
     return updated;
   } catch (e) {
     return DEFAULT_CLOUD_CONFIG;
@@ -50,8 +56,8 @@ const notifyCloudStatus = (status, extra = {}) => {
 };
 
 /**
- * Fetch latest production dataset from Cloud Database
- * Bypasses all browser and CDN caches with cache-busting headers
+ * Fetch latest production dataset from Central Cloud Database
+ * Bypasses all browser, ISP, and CDN caches with cache-busting headers
  */
 export const fetchCloudDataset = async () => {
   const config = getCloudConfig();
@@ -90,32 +96,36 @@ export const fetchCloudDataset = async () => {
 
     const rawData = await res.json();
     if (!rawData) {
-      notifyCloudStatus('online', { message: 'قاعدة البيانات السحابية فارغة، بانتظار نشر البيانات' });
+      notifyCloudStatus('online', { message: 'قاعدة البيانات السحابية فارغة' });
       return null;
     }
 
-    // Support JSONBin structure (where data is in record) or direct JSON
-    const data = rawData.record ? rawData.record : rawData;
+    let finalData = rawData;
+    if (rawData.data && typeof rawData.data === 'object') {
+      finalData = rawData.data;
+    } else if (rawData.record && typeof rawData.record === 'object') {
+      finalData = rawData.record;
+    }
 
     saveCloudConfig({ lastSyncTime: Date.now(), syncStatus: 'online' });
     notifyCloudStatus('online', { lastSyncTime: Date.now() });
 
-    return data;
+    return finalData;
   } catch (err) {
-    console.warn('[CloudSync] Cloud fetch error (using local cache):', err.message);
+    console.warn('[CloudSync] Cloud fetch notice:', err.message);
     notifyCloudStatus('offline', { message: err.message });
     return null;
   }
 };
 
 /**
- * Save complete production dataset to Cloud Database
- * Pushes Admin changes to the world
+ * Save complete production dataset to Central Cloud Database
+ * Pushes Admin changes to the world so every student sees the update
  */
 export const pushCloudDataset = async (fullData) => {
   const config = getCloudConfig();
   if (!config.enabled || !config.apiUrl) {
-    return { success: false, message: 'المزامنة السحابية غير مفعلة' };
+    return { success: false, message: 'يرجى إدخال رابط قاعدة البيانات السحابية (Firebase / Cloud REST URL) لتفعيل المزامنة العالمية.' };
   }
 
   notifyCloudStatus('syncing');
@@ -132,7 +142,7 @@ export const pushCloudDataset = async (fullData) => {
 
     const headers = {
       'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache'
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
     };
 
     if (config.apiKey) {
@@ -140,11 +150,8 @@ export const pushCloudDataset = async (fullData) => {
       headers['X-Master-Key'] = config.apiKey;
     }
 
-    // Default method is PUT for Firebase REST or Custom REST to replace root object
-    const method = 'PUT';
-
-    const res = await fetch(pushUrl, {
-      method,
+    let res = await fetch(pushUrl, {
+      method: 'PUT',
       headers,
       body: JSON.stringify(payload)
     });
@@ -156,7 +163,7 @@ export const pushCloudDataset = async (fullData) => {
     }
 
     saveCloudConfig({ lastSyncTime: Date.now(), syncStatus: 'online' });
-    notifyCloudStatus('online', { lastSyncTime: Date.now(), message: 'تمت المزامنة بنجاح' });
+    notifyCloudStatus('online', { lastSyncTime: Date.now(), message: 'تمت مزامنة ونشر البيانات للسحابة بنجاح' });
 
     return { success: true, lastUpdated: payload.lastUpdated };
   } catch (err) {

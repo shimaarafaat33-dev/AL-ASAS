@@ -4,7 +4,7 @@ import {
   getCloudConfig, 
   saveCloudConfig, 
   subscribeCloudStatus 
-} from './cloudDb';
+} from './cloudDb.js';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -611,8 +611,11 @@ const scheduleCloudPush = () => {
 // Helper functions for LocalStorage
 const getStored = (key, fallback) => {
   try {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : fallback;
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const item = localStorage.getItem(key);
+      return item ? JSON.parse(item) : fallback;
+    }
+    return fallback;
   } catch (e) {
     console.error(`Error reading ${key}:`, e);
     return fallback;
@@ -621,7 +624,9 @@ const getStored = (key, fallback) => {
 
 const setStored = (key, value) => {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
     notifySubscribersDebounced(key, value, true);
     if (key !== STORAGE_KEYS.AUTH && key !== STORAGE_KEYS.MESSAGES) {
       scheduleCloudPush();
@@ -634,15 +639,17 @@ const setStored = (key, value) => {
 // Initialize default data if empty (direct write without triggering notification cascade)
 export const initDB = () => {
   try {
-    if (!localStorage.getItem(STORAGE_KEYS.APP_SETTINGS)) localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(DEFAULT_APP_SETTINGS));
-    if (!localStorage.getItem(STORAGE_KEYS.FEATURES)) localStorage.setItem(STORAGE_KEYS.FEATURES, JSON.stringify(DEFAULT_FEATURES));
-    if (!localStorage.getItem(STORAGE_KEYS.STATS)) localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(DEFAULT_STATS));
-    if (!localStorage.getItem(STORAGE_KEYS.SUBJECTS)) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(DEFAULT_SUBJECTS));
-    if (!localStorage.getItem(STORAGE_KEYS.TEACHERS)) localStorage.setItem(STORAGE_KEYS.TEACHERS, JSON.stringify(DEFAULT_TEACHERS));
-    if (!localStorage.getItem(STORAGE_KEYS.VIDEOS)) localStorage.setItem(STORAGE_KEYS.VIDEOS, JSON.stringify(DEFAULT_VIDEOS));
-    if (!localStorage.getItem(STORAGE_KEYS.GALLERY)) localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(DEFAULT_GALLERY));
-    if (!localStorage.getItem(STORAGE_KEYS.TESTIMONIALS)) localStorage.setItem(STORAGE_KEYS.TESTIMONIALS, JSON.stringify(DEFAULT_TESTIMONIALS));
-    if (!localStorage.getItem(STORAGE_KEYS.MESSAGES)) localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(DEFAULT_MESSAGES));
+    if (typeof window !== 'undefined' && window.localStorage) {
+      if (!localStorage.getItem(STORAGE_KEYS.APP_SETTINGS)) localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(DEFAULT_APP_SETTINGS));
+      if (!localStorage.getItem(STORAGE_KEYS.FEATURES)) localStorage.setItem(STORAGE_KEYS.FEATURES, JSON.stringify(DEFAULT_FEATURES));
+      if (!localStorage.getItem(STORAGE_KEYS.STATS)) localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(DEFAULT_STATS));
+      if (!localStorage.getItem(STORAGE_KEYS.SUBJECTS)) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(DEFAULT_SUBJECTS));
+      if (!localStorage.getItem(STORAGE_KEYS.TEACHERS)) localStorage.setItem(STORAGE_KEYS.TEACHERS, JSON.stringify(DEFAULT_TEACHERS));
+      if (!localStorage.getItem(STORAGE_KEYS.VIDEOS)) localStorage.setItem(STORAGE_KEYS.VIDEOS, JSON.stringify(DEFAULT_VIDEOS));
+      if (!localStorage.getItem(STORAGE_KEYS.GALLERY)) localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(DEFAULT_GALLERY));
+      if (!localStorage.getItem(STORAGE_KEYS.TESTIMONIALS)) localStorage.setItem(STORAGE_KEYS.TESTIMONIALS, JSON.stringify(DEFAULT_TESTIMONIALS));
+      if (!localStorage.getItem(STORAGE_KEYS.MESSAGES)) localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(DEFAULT_MESSAGES));
+    }
   } catch (e) {
     console.error('Init DB error:', e);
   }

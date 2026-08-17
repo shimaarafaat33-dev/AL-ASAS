@@ -63,7 +63,7 @@ export default function AdminDashboard({ db, onSettingsChange }) {
     if (res?.success) {
       notify('تمت مزامنة ونشر كافة البيانات إلى السحابة بنجاح! ☁️');
     } else {
-      notify('تنبيه: ' + (res?.message || 'تم تحديث السحابة بنجاح'));
+      notify(res?.message || 'تنبيه: يرجى التحقق من رابط قاعدة البيانات السحابية');
     }
   };
 
@@ -77,16 +77,62 @@ export default function AdminDashboard({ db, onSettingsChange }) {
       if (onSettingsChange) onSettingsChange();
       notify('تم جلب وتحديث البيانات من السحابة بنجاح! ☁️');
     } else {
-      notify('البيانات الحالية محدثة ومطابقة للسحابة.');
+      notify('لم يتم العثور على بيانات جديدة في السحابة.');
     }
   };
 
-  const handleSaveCloudConfig = (e) => {
+  const handleSaveCloudConfig = async (e) => {
     e.preventDefault();
     if (db?.saveCloudConfig) {
       db.saveCloudConfig(cloudConfig);
       notify('تم حفظ إعدادات السحابة والمزامنة بنجاح!');
+      if (cloudConfig.apiUrl) {
+        await handleManualCloudPush();
+      }
     }
+  };
+
+  const handleExportJSON = () => {
+    if (!db) return;
+    const full = {
+      appSettings: db.getAppSettings(),
+      features: db.getFeatures(),
+      stats: db.getStats(),
+      subjects: db.getSubjects(),
+      teachers: db.getTeachers(),
+      videos: db.getVideos(),
+      gallery: db.getGallery(),
+      testimonials: db.getTestimonials(),
+      exportedAt: new Date().toISOString(),
+      version: 1
+    };
+    const blob = new Blob([JSON.stringify(full, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `alasas_database_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    notify('تم تصدير ملف النسخة الاحتياطية لقاعدة البيانات بنجاح!');
+  };
+
+  const handleImportJSON = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        if (parsed.appSettings) db.saveAppSettings(parsed.appSettings);
+        loadAllData();
+        if (onSettingsChange) onSettingsChange();
+        await db.syncToCloudNow();
+        notify('تم استيراد وتطبيق البيانات ومزامنتها بنجاح! ☁️');
+      } catch (err) {
+        alert('فشل قراءة الملف: تأكد من أنه ملف JSON صحيح.');
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleLogin = (e) => {
@@ -855,15 +901,67 @@ export default function AdminDashboard({ db, onSettingsChange }) {
               </label>
             </div>
 
-            <div className="pt-3">
+            <div className="pt-2">
               <button
                 type="submit"
                 className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-md"
               >
-                حفظ إعدادات السحابة
+                حفظ إعدادات السحابة وتحديث الرابط
               </button>
             </div>
           </form>
+
+          {/* Backup & Manual JSON Sync Section */}
+          <div className="border-t border-slate-800 pt-6 mt-6">
+            <h3 className="text-sm font-bold text-white mb-3">النسخ الاحتياطي ومشاركة قاعدة البيانات (JSON Backup & Sync)</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-navy-950 p-5 rounded-2xl border border-slate-800 space-y-3">
+                <span className="text-xs font-bold text-slate-200 block">تصدير نسخة كاملة من قاعدة البيانات</span>
+                <p className="text-[11px] text-slate-400">
+                  قم بتحميل ملف JSON يحتوي على كافة بيانات المنصة الحالية للنسخ الاحتياطي أو النقل.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleExportJSON}
+                  className="px-4 py-2 rounded-xl bg-navy-800 hover:bg-slate-700 text-amber-400 text-xs font-bold border border-amber-500/30 flex items-center gap-2"
+                >
+                  <CloudDownload className="w-4 h-4" />
+                  <span>تصدير ملف البيانات (JSON)</span>
+                </button>
+              </div>
+
+              <div className="bg-navy-950 p-5 rounded-2xl border border-slate-800 space-y-3">
+                <span className="text-xs font-bold text-slate-200 block">استيراد وتحديث قاعدة البيانات من ملف</span>
+                <p className="text-[11px] text-slate-400">
+                  قم برفع ملف JSON لتطبيق كافة البيانات وتحديث الموقع والسحابة فوراً.
+                </p>
+                <label className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-navy-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold border border-emerald-500/30 cursor-pointer">
+                  <CloudUpload className="w-4 h-4" />
+                  <span>استيراد ملف JSON وتطبيقه</span>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportJSON}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Firebase Guide Box */}
+          <div className="bg-gradient-to-r from-navy-950 to-blue-950/40 p-5 rounded-2xl border border-blue-500/30 space-y-3">
+            <div className="flex items-center gap-2 text-blue-400 font-bold text-xs">
+              <Globe className="w-4 h-4" />
+              <span>خطوات ربط قاعدة بيانات Firebase Realtime السحابية (مجانية 100% ومدى الحياة):</span>
+            </div>
+            <ol className="text-[12px] text-slate-300 space-y-1.5 list-decimal list-inside leading-relaxed pr-2">
+              <li>ادخل على موقع <strong>console.firebase.google.com</strong> وأنشئ مشروع جديد مجاني.</li>
+              <li>من القائمة الجانبية، اختر <strong>Build</strong> ثم <strong>Realtime Database</strong> واضغط <strong>Create Database</strong>.</li>
+              <li>في تبويب <strong>Rules</strong>، اجعل القراءة والكتابة مفتوحة: <code className="text-amber-300 font-mono bg-navy-900 px-1 py-0.5 rounded">{`{ "rules": { ".read": true, ".write": true } }`}</code></li>
+              <li>انسخ رابط قاعدة البيانات (مثل: <code className="text-amber-300 font-mono bg-navy-900 px-1 py-0.5 rounded">https://your-project.firebaseio.com/alasas_data.json</code>) والصقه في الحقل أعلاه واضغط حفظ.</li>
+            </ol>
+          </div>
         </div>
       )}
 
