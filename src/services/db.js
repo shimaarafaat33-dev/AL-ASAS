@@ -1,9 +1,9 @@
-import { 
-  fetchCloudDataset, 
-  pushCloudDataset, 
-  getCloudConfig, 
-  saveCloudConfig, 
-  subscribeCloudStatus 
+import {
+  fetchCloudDataset,
+  pushCloudDataset,
+  getCloudConfig,
+  saveCloudConfig,
+  subscribeCloudStatus
 } from './cloudDb.js';
 
 // Storage keys
@@ -29,9 +29,9 @@ const DEFAULT_APP_SETTINGS = {
   heroSubtitle: "معًا... نحو مستقبل أفضل",
   heroDescription: "منصة تعليمية متكاملة تقدم محتوى تعليميًا متميزًا للطلاب من مرحلة التأسيس وحتى المرحلة الثانوية، مع نخبة من المدرسين وتجربة تعليمية حديثة تساعد الطالب على التعلم والتطور.",
   heroImage: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1200&q=80",
-  googlePlayUrl: "https://github.com/shimaarafaat33-dev/AL-ASAS/releases/download/v1.0.0/app-release.apk",
+  googlePlayUrl: "https://github.com/shimaarafaat33-dev/AL-ASAS/releases/download/1.1.2/AL-ASAS.V1.1.2.apk",
   appStoreUrl: "https://apps.apple.com/app/alasas-education/id123456789",
-  qrCodeUrl: "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https%3A%2F%2Fgithub.com%2Fshimaarafaat33-dev%2FAL-ASAS%2Freleases%2Fdownload%2Fv1.0.0%2Fapp-release.apk&color=070c1b&bgcolor=ffffff",
+  qrCodeUrl: "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https%3A%2F%2Fgithub.com%2Fshimaarafaat33-dev%2FAL-ASAS%2Freleases%2Fdownload%2F1.1.2%2FAL-ASAS.V1.1.2.apk&color=070c1b&bgcolor=ffffff",
   appMockupImage: "./phone_mockup_transparent.png",
   facebookUrl: "https://www.facebook.com/share/1977UiCsvr/",
   instagramUrl: "https://instagram.com/AlAsasEducation",
@@ -576,7 +576,7 @@ if (typeof window !== 'undefined') {
       let parsed = null;
       try {
         parsed = e.newValue ? JSON.parse(e.newValue) : null;
-      } catch (err) {}
+      } catch (err) { }
       notifySubscribersDebounced(e.key, parsed, false);
     }
   });
@@ -669,8 +669,8 @@ export const dbService = {
       email: (!stored || !stored.email || stored.email === 'info@alasas-edu.com') ? 'alasas.education.0@gmail.com' : stored.email,
       whatsappNumber: (!stored || !stored.whatsappNumber || stored.whatsappNumber === '+201001234567') ? '+201558738502' : stored.whatsappNumber,
       facebookUrl: (!stored || !stored.facebookUrl || stored.facebookUrl.includes('AlAsasEducation')) ? 'https://www.facebook.com/share/1977UiCsvr/' : stored.facebookUrl,
-      googlePlayUrl: (!stored || !stored.googlePlayUrl || stored.googlePlayUrl.includes('play.google.com/store/apps/details?id=com.alasasedu.app')) ? 'https://github.com/shimaarafaat33-dev/AL-ASAS/releases/download/v1.0.0/app-release.apk' : stored.googlePlayUrl,
-      qrCodeUrl: (!stored || !stored.qrCodeUrl || stored.qrCodeUrl.includes('alasasedu.com/download')) ? 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https%3A%2F%2Fgithub.com%2Fshimaarafaat33-dev%2FAL-ASAS%2Freleases%2Fdownload%2Fv1.0.0%2Fapp-release.apk&color=070c1b&bgcolor=ffffff' : stored.qrCodeUrl,
+      googlePlayUrl: (!stored || !stored.googlePlayUrl || stored.googlePlayUrl.includes('play.google.com/store/apps/details?id=com.alasasedu.app') || stored.googlePlayUrl.includes('v1.0.0') || stored.googlePlayUrl.includes('app-release.apk') || stored.googlePlayUrl.includes('AL-ASAS.V1.1.2.apkhttps')) ? 'https://github.com/shimaarafaat33-dev/AL-ASAS/releases/download/1.1.2/AL-ASAS.V1.1.2.apk' : stored.googlePlayUrl,
+      qrCodeUrl: (!stored || !stored.qrCodeUrl || stored.qrCodeUrl.includes('alasasedu.com/download') || stored.qrCodeUrl.includes('v1.0.0') || stored.qrCodeUrl.includes('app-release.apk')) ? 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https%3A%2F%2Fgithub.com%2Fshimaarafaat33-dev%2FAL-ASAS%2Freleases%2Fdownload%2F1.1.2%2FAL-ASAS.V1.1.2.apk&color=070c1b&bgcolor=ffffff' : stored.qrCodeUrl,
       appMockupImage: (!stored || !stored.appMockupImage || stored.appMockupImage.includes('unsplash') || stored.appMockupImage.includes('app_mockup.jpg')) ? './phone_mockup_transparent.png' : (stored.appMockupImage.startsWith('/') ? '.' + stored.appMockupImage : stored.appMockupImage),
     };
     return updated;
@@ -846,7 +846,7 @@ export const dbService = {
     const p = (password || '').trim();
     const validUsers = ['admin', 'الأساس', 'alasas', 'مدير'];
     const validPasswords = ['admin', 'asas2026', '123456', '1234', 'asas', '01558738502'];
-    
+
     if (validUsers.includes(u) && validPasswords.includes(p.toLowerCase())) {
       setStored(STORAGE_KEYS.AUTH, { authenticated: true, username: 'admin', loginTime: Date.now() });
       return true;
