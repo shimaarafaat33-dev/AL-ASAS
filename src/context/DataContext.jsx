@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { dbService, subscribeDB } from '../services/db';
 
 const DataContext = createContext(null);
@@ -15,28 +15,30 @@ export function DataProvider({ children }) {
   const [stats, setStats] = useState(() => dbService.getStats());
   const [messages, setMessages] = useState(() => dbService.getContactMessages());
 
-  const refreshAll = () => {
-    setAppSettings(dbService.getAppSettings());
-    setSubjects(dbService.getSubjects());
-    setTeachers(dbService.getTeachers());
-    setVideos(dbService.getVideos());
-    setGallery(dbService.getGallery());
-    setTestimonials(dbService.getTestimonials());
-    setFeatures(dbService.getFeatures());
-    setStats(dbService.getStats());
-    setMessages(dbService.getContactMessages());
+  const refreshAll = useCallback((targetKey) => {
+    if (!targetKey || targetKey.includes('app_settings')) setAppSettings(dbService.getAppSettings());
+    if (!targetKey || targetKey.includes('subjects')) setSubjects(dbService.getSubjects());
+    if (!targetKey || targetKey.includes('teachers')) setTeachers(dbService.getTeachers());
+    if (!targetKey || targetKey.includes('videos')) setVideos(dbService.getVideos());
+    if (!targetKey || targetKey.includes('gallery')) setGallery(dbService.getGallery());
+    if (!targetKey || targetKey.includes('testimonials')) setTestimonials(dbService.getTestimonials());
+    if (!targetKey || targetKey.includes('features')) setFeatures(dbService.getFeatures());
+    if (!targetKey || targetKey.includes('stats')) setStats(dbService.getStats());
+    if (!targetKey || targetKey.includes('messages')) setMessages(dbService.getContactMessages());
     setDataVersion(v => v + 1);
-  };
-
-  useEffect(() => {
-    // Subscribe to any changes from dbService (local or cross-tab)
-    const unsubscribe = subscribeDB(() => {
-      refreshAll();
-    });
-    return unsubscribe;
   }, []);
 
-  const value = {
+  useEffect(() => {
+    // Single, clean listener with proper unmount teardown
+    const unsubscribe = subscribeDB((key) => {
+      refreshAll(key);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [refreshAll]);
+
+  const value = useMemo(() => ({
     db: dbService,
     appSettings,
     subjects,
@@ -49,7 +51,19 @@ export function DataProvider({ children }) {
     messages,
     refreshAll,
     dataVersion
-  };
+  }), [
+    appSettings,
+    subjects,
+    teachers,
+    videos,
+    gallery,
+    testimonials,
+    features,
+    stats,
+    messages,
+    refreshAll,
+    dataVersion
+  ]);
 
   return (
     <DataContext.Provider value={value}>
@@ -61,7 +75,6 @@ export function DataProvider({ children }) {
 export function useData() {
   const context = useContext(DataContext);
   if (!context) {
-    // Fallback if rendered outside DataProvider
     return {
       db: dbService,
       appSettings: dbService.getAppSettings(),

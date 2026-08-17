@@ -508,6 +508,7 @@ const DEFAULT_MESSAGES = [
 
 // In-memory subscribers set for live real-time React reactivity
 const subscribers = new Set();
+const SESSION_ID = 'sess_' + Math.random().toString(36).substring(2, 10);
 
 export const subscribeDB = (callback) => {
   subscribers.add(callback);
@@ -516,18 +517,48 @@ export const subscribeDB = (callback) => {
   };
 };
 
+let notifyTimer = null;
+const notifySubscribersDebounced = (key, value, broadcast = true) => {
+  if (notifyTimer) clearTimeout(notifyTimer);
+  notifyTimer = setTimeout(() => {
+    subscribers.forEach(cb => {
+      try {
+        cb(key, value);
+      } catch (err) {
+        console.error('Error in DB subscriber callback:', err);
+      }
+    });
+  }, 25);
+
+  if (broadcast && dbBroadcastChannel) {
+    try {
+      dbBroadcastChannel.postMessage({ senderId: SESSION_ID, key, value, timestamp: Date.now() });
+    } catch (err) {
+      // Broadcast error ignore
+    }
+  }
+
+  // Also dispatch window custom event for other vanilla listeners
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('alasas_db_change', { detail: { key, value } }));
+  }
+};
+
 // BroadcastChannel for instant cross-tab real-time sync
 let dbBroadcastChannel = null;
 try {
   if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
     dbBroadcastChannel = new BroadcastChannel('alasas_db_sync_channel');
     dbBroadcastChannel.onmessage = (event) => {
-      const { key, value } = event.data || {};
-      notifySubscribers(key, value, false);
+      const data = event.data || {};
+      // Ignore messages broadcast by this same tab session to prevent loops
+      if (data.senderId !== SESSION_ID) {
+        notifySubscribersDebounced(data.key, data.value, false);
+      }
     };
   }
 } catch (e) {
-  // Graceful fallback if BroadcastChannel is restricted
+  // Graceful fallback
 }
 
 // Storage event listener for multi-tab fallback
@@ -538,33 +569,10 @@ if (typeof window !== 'undefined') {
       try {
         parsed = e.newValue ? JSON.parse(e.newValue) : null;
       } catch (err) {}
-      notifySubscribers(e.key, parsed, false);
+      notifySubscribersDebounced(e.key, parsed, false);
     }
   });
 }
-
-const notifySubscribers = (key, value, broadcast = true) => {
-  subscribers.forEach(cb => {
-    try {
-      cb(key, value);
-    } catch (err) {
-      console.error('Error in DB subscriber callback:', err);
-    }
-  });
-
-  if (broadcast && dbBroadcastChannel) {
-    try {
-      dbBroadcastChannel.postMessage({ key, value, timestamp: Date.now() });
-    } catch (err) {
-      // Broadcast error ignore
-    }
-  }
-
-  // Also dispatch window custom event
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('alasas_db_change', { detail: { key, value } }));
-  }
-};
 
 // Helper functions for LocalStorage
 const getStored = (key, fallback) => {
@@ -580,28 +588,32 @@ const getStored = (key, fallback) => {
 const setStored = (key, value) => {
   try {
     localStorage.setItem(key, JSON.stringify(value));
-    notifySubscribers(key, value, true);
+    notifySubscribersDebounced(key, value, true);
   } catch (e) {
     console.error(`Error writing ${key}:`, e);
   }
 };
 
-// Initialize default data if empty
+// Initialize default data if empty (direct write without triggering notification cascade)
 export const initDB = () => {
-  if (!localStorage.getItem(STORAGE_KEYS.APP_SETTINGS)) setStored(STORAGE_KEYS.APP_SETTINGS, DEFAULT_APP_SETTINGS);
-  if (!localStorage.getItem(STORAGE_KEYS.FEATURES)) setStored(STORAGE_KEYS.FEATURES, DEFAULT_FEATURES);
-  if (!localStorage.getItem(STORAGE_KEYS.STATS)) setStored(STORAGE_KEYS.STATS, DEFAULT_STATS);
-  if (!localStorage.getItem(STORAGE_KEYS.SUBJECTS)) setStored(STORAGE_KEYS.SUBJECTS, DEFAULT_SUBJECTS);
-  if (!localStorage.getItem(STORAGE_KEYS.TEACHERS)) setStored(STORAGE_KEYS.TEACHERS, DEFAULT_TEACHERS);
-  if (!localStorage.getItem(STORAGE_KEYS.VIDEOS)) setStored(STORAGE_KEYS.VIDEOS, DEFAULT_VIDEOS);
-  if (!localStorage.getItem(STORAGE_KEYS.GALLERY)) setStored(STORAGE_KEYS.GALLERY, DEFAULT_GALLERY);
-  if (!localStorage.getItem(STORAGE_KEYS.TESTIMONIALS)) setStored(STORAGE_KEYS.TESTIMONIALS, DEFAULT_TESTIMONIALS);
-  if (!localStorage.getItem(STORAGE_KEYS.MESSAGES)) setStored(STORAGE_KEYS.MESSAGES, DEFAULT_MESSAGES);
+  try {
+    if (!localStorage.getItem(STORAGE_KEYS.APP_SETTINGS)) localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(DEFAULT_APP_SETTINGS));
+    if (!localStorage.getItem(STORAGE_KEYS.FEATURES)) localStorage.setItem(STORAGE_KEYS.FEATURES, JSON.stringify(DEFAULT_FEATURES));
+    if (!localStorage.getItem(STORAGE_KEYS.STATS)) localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(DEFAULT_STATS));
+    if (!localStorage.getItem(STORAGE_KEYS.SUBJECTS)) localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(DEFAULT_SUBJECTS));
+    if (!localStorage.getItem(STORAGE_KEYS.TEACHERS)) localStorage.setItem(STORAGE_KEYS.TEACHERS, JSON.stringify(DEFAULT_TEACHERS));
+    if (!localStorage.getItem(STORAGE_KEYS.VIDEOS)) localStorage.setItem(STORAGE_KEYS.VIDEOS, JSON.stringify(DEFAULT_VIDEOS));
+    if (!localStorage.getItem(STORAGE_KEYS.GALLERY)) localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(DEFAULT_GALLERY));
+    if (!localStorage.getItem(STORAGE_KEYS.TESTIMONIALS)) localStorage.setItem(STORAGE_KEYS.TESTIMONIALS, JSON.stringify(DEFAULT_TESTIMONIALS));
+    if (!localStorage.getItem(STORAGE_KEYS.MESSAGES)) localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(DEFAULT_MESSAGES));
+  } catch (e) {
+    console.error('Init DB error:', e);
+  }
 };
 
 initDB();
 
-// API Services
+// API Services (Pure getters without mutating storage on reads)
 export const dbService = {
   // App Settings & Info
   getAppSettings: () => {
@@ -656,23 +668,13 @@ export const dbService = {
     return list;
   },
 
-  // Subjects CRUD
+  // Subjects CRUD (Pure Read)
   getSubjects: () => {
-    let list = getStored(STORAGE_KEYS.SUBJECTS, null);
-    if (!list || list.length < 10) {
-      list = DEFAULT_SUBJECTS;
-    } else {
-      DEFAULT_SUBJECTS.forEach(defSub => {
-        const exists = list.find(s => s.name === defSub.name && s.stage === defSub.stage);
-        if (!exists) {
-          list.push(defSub);
-        } else if (defSub.name === 'الدراسات الاجتماعية' && defSub.stage === 'الابتدائي') {
-          exists.image = defSub.image;
-        }
-      });
+    const list = getStored(STORAGE_KEYS.SUBJECTS, null);
+    if (list && Array.isArray(list) && list.length >= 8) {
+      return list;
     }
-    setStored(STORAGE_KEYS.SUBJECTS, list);
-    return list;
+    return DEFAULT_SUBJECTS;
   },
   saveSubject: (subject) => {
     const list = getStored(STORAGE_KEYS.SUBJECTS, DEFAULT_SUBJECTS);
@@ -688,25 +690,13 @@ export const dbService = {
     return list;
   },
 
-  // Teachers CRUD
+  // Teachers CRUD (Pure Read)
   getTeachers: () => {
-    let list = getStored(STORAGE_KEYS.TEACHERS, null);
-    if (!list || list.length < 10) {
-      list = DEFAULT_TEACHERS;
-    } else {
-      DEFAULT_TEACHERS.forEach(defT => {
-        const exists = list.find(t => t.id === defT.id || t.name === defT.name);
-        if (!exists) {
-          list.push(defT);
-        } else if (defT.id === 't-shaimaa' || defT.name.includes('شيماء')) {
-          exists.avatar = './shaimaa.jpg';
-        } else if (defT.id === 't-math-2' || defT.name.includes('إسلام')) {
-          exists.avatar = './teacher_islam.jpg';
-        }
-      });
+    const list = getStored(STORAGE_KEYS.TEACHERS, null);
+    if (list && Array.isArray(list) && list.length >= 8) {
+      return list;
     }
-    setStored(STORAGE_KEYS.TEACHERS, list);
-    return list;
+    return DEFAULT_TEACHERS;
   },
   saveTeacher: (teacher) => {
     const list = getStored(STORAGE_KEYS.TEACHERS, DEFAULT_TEACHERS);
@@ -722,28 +712,13 @@ export const dbService = {
     return list;
   },
 
-  // Videos CRUD
+  // Videos CRUD (Pure Read)
   getVideos: () => {
-    let list = getStored(STORAGE_KEYS.VIDEOS, DEFAULT_VIDEOS);
-    
-    // Filter out old local mp4 files and past links
-    list = list.filter(v => v.videoUrl && !v.videoUrl.endsWith('.mp4') && !v.videoUrl.includes('/videos/') && !v.videoUrl.includes('1EU6vaJYqW') && !v.videoUrl.includes('1DJCatbepN'));
-    
-    DEFAULT_VIDEOS.forEach(defV => {
-      const exists = list.find(v => v.videoUrl === defV.videoUrl || v.id === defV.id);
-      if (!exists) {
-        list.push(defV);
-      } else {
-        exists.videoUrl = defV.videoUrl;
-      }
-    });
-
-    if (list.length === 0) {
-      list = DEFAULT_VIDEOS;
+    const list = getStored(STORAGE_KEYS.VIDEOS, null);
+    if (list && Array.isArray(list) && list.length > 0) {
+      return list.filter(v => v.videoUrl && !v.videoUrl.endsWith('.mp4') && !v.videoUrl.includes('/videos/'));
     }
-
-    setStored(STORAGE_KEYS.VIDEOS, list);
-    return list;
+    return DEFAULT_VIDEOS;
   },
   saveVideo: (video) => {
     const list = getStored(STORAGE_KEYS.VIDEOS, DEFAULT_VIDEOS);
@@ -844,15 +819,15 @@ export const dbService = {
 
   // Reset function
   resetToDefaultData: () => {
-    setStored(STORAGE_KEYS.APP_SETTINGS, DEFAULT_APP_SETTINGS);
-    setStored(STORAGE_KEYS.FEATURES, DEFAULT_FEATURES);
-    setStored(STORAGE_KEYS.STATS, DEFAULT_STATS);
-    setStored(STORAGE_KEYS.SUBJECTS, DEFAULT_SUBJECTS);
-    setStored(STORAGE_KEYS.TEACHERS, DEFAULT_TEACHERS);
-    setStored(STORAGE_KEYS.VIDEOS, DEFAULT_VIDEOS);
-    setStored(STORAGE_KEYS.GALLERY, DEFAULT_GALLERY);
-    setStored(STORAGE_KEYS.TESTIMONIALS, DEFAULT_TESTIMONIALS);
-    setStored(STORAGE_KEYS.MESSAGES, DEFAULT_MESSAGES);
+    localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(DEFAULT_APP_SETTINGS));
+    localStorage.setItem(STORAGE_KEYS.FEATURES, JSON.stringify(DEFAULT_FEATURES));
+    localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(DEFAULT_STATS));
+    localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(DEFAULT_SUBJECTS));
+    localStorage.setItem(STORAGE_KEYS.TEACHERS, JSON.stringify(DEFAULT_TEACHERS));
+    localStorage.setItem(STORAGE_KEYS.VIDEOS, JSON.stringify(DEFAULT_VIDEOS));
+    localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(DEFAULT_GALLERY));
+    localStorage.setItem(STORAGE_KEYS.TESTIMONIALS, JSON.stringify(DEFAULT_TESTIMONIALS));
+    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(DEFAULT_MESSAGES));
     window.location.reload();
   }
 };
