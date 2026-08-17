@@ -14,27 +14,54 @@ export function DataProvider({ children }) {
   const [features, setFeatures] = useState(() => dbService.getFeatures());
   const [stats, setStats] = useState(() => dbService.getStats());
   const [messages, setMessages] = useState(() => dbService.getContactMessages());
+  const [isCloudSynced, setIsCloudSynced] = useState(false);
 
   const refreshAll = useCallback((targetKey) => {
-    if (!targetKey || targetKey.includes('app_settings')) setAppSettings(dbService.getAppSettings());
-    if (!targetKey || targetKey.includes('subjects')) setSubjects(dbService.getSubjects());
-    if (!targetKey || targetKey.includes('teachers')) setTeachers(dbService.getTeachers());
-    if (!targetKey || targetKey.includes('videos')) setVideos(dbService.getVideos());
-    if (!targetKey || targetKey.includes('gallery')) setGallery(dbService.getGallery());
-    if (!targetKey || targetKey.includes('testimonials')) setTestimonials(dbService.getTestimonials());
-    if (!targetKey || targetKey.includes('features')) setFeatures(dbService.getFeatures());
-    if (!targetKey || targetKey.includes('stats')) setStats(dbService.getStats());
-    if (!targetKey || targetKey.includes('messages')) setMessages(dbService.getContactMessages());
+    if (!targetKey || targetKey.includes('app_settings') || targetKey === 'cloud_sync') setAppSettings(dbService.getAppSettings());
+    if (!targetKey || targetKey.includes('subjects') || targetKey === 'cloud_sync') setSubjects(dbService.getSubjects());
+    if (!targetKey || targetKey.includes('teachers') || targetKey === 'cloud_sync') setTeachers(dbService.getTeachers());
+    if (!targetKey || targetKey.includes('videos') || targetKey === 'cloud_sync') setVideos(dbService.getVideos());
+    if (!targetKey || targetKey.includes('gallery') || targetKey === 'cloud_sync') setGallery(dbService.getGallery());
+    if (!targetKey || targetKey.includes('testimonials') || targetKey === 'cloud_sync') setTestimonials(dbService.getTestimonials());
+    if (!targetKey || targetKey.includes('features') || targetKey === 'cloud_sync') setFeatures(dbService.getFeatures());
+    if (!targetKey || targetKey.includes('stats') || targetKey === 'cloud_sync') setStats(dbService.getStats());
+    if (!targetKey || targetKey.includes('messages') || targetKey === 'cloud_sync') setMessages(dbService.getContactMessages());
     setDataVersion(v => v + 1);
   }, []);
 
   useEffect(() => {
-    // Single, clean listener with proper unmount teardown
+    // 1. Single local/cross-tab reactive listener
     const unsubscribe = subscribeDB((key) => {
       refreshAll(key);
     });
+
+    // 2. Fetch fresh production data from Cloud on mount
+    dbService.syncFromCloudNow().then((synced) => {
+      if (synced) setIsCloudSynced(true);
+    });
+
+    // 3. Stale-While-Revalidate: Sync when tab is focused or becomes visible
+    const handleFocusSync = () => {
+      if (document.visibilityState === 'visible') {
+        dbService.syncFromCloudNow();
+      }
+    };
+
+    window.addEventListener('focus', handleFocusSync);
+    document.addEventListener('visibilitychange', handleFocusSync);
+
+    // 4. Background cloud heartbeat every 60s
+    const heartbeat = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        dbService.syncFromCloudNow();
+      }
+    }, 60000);
+
     return () => {
       unsubscribe();
+      window.removeEventListener('focus', handleFocusSync);
+      document.removeEventListener('visibilitychange', handleFocusSync);
+      clearInterval(heartbeat);
     };
   }, [refreshAll]);
 
@@ -50,7 +77,10 @@ export function DataProvider({ children }) {
     stats,
     messages,
     refreshAll,
-    dataVersion
+    dataVersion,
+    isCloudSynced,
+    syncFromCloud: dbService.syncFromCloudNow,
+    syncToCloud: dbService.syncToCloudNow
   }), [
     appSettings,
     subjects,
@@ -62,7 +92,8 @@ export function DataProvider({ children }) {
     stats,
     messages,
     refreshAll,
-    dataVersion
+    dataVersion,
+    isCloudSynced
   ]);
 
   return (
@@ -87,7 +118,10 @@ export function useData() {
       stats: dbService.getStats(),
       messages: dbService.getContactMessages(),
       refreshAll: () => {},
-      dataVersion: 0
+      dataVersion: 0,
+      isCloudSynced: false,
+      syncFromCloud: async () => false,
+      syncToCloud: async () => false
     };
   }
   return context;

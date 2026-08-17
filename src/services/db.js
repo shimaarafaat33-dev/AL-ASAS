@@ -1,3 +1,11 @@
+import { 
+  fetchCloudDataset, 
+  pushCloudDataset, 
+  getCloudConfig, 
+  saveCloudConfig, 
+  subscribeCloudStatus 
+} from './cloudDb';
+
 // Storage keys
 const STORAGE_KEYS = {
   SUBJECTS: 'alasas_subjects',
@@ -574,6 +582,32 @@ if (typeof window !== 'undefined') {
   });
 }
 
+// Function to export all current state for cloud push
+const getFullExportDataset = () => ({
+  appSettings: dbService.getAppSettings(),
+  features: dbService.getFeatures(),
+  stats: dbService.getStats(),
+  subjects: dbService.getSubjects(),
+  teachers: dbService.getTeachers(),
+  videos: dbService.getVideos(),
+  gallery: dbService.getGallery(),
+  testimonials: dbService.getTestimonials(),
+  version: Date.now()
+});
+
+let cloudPushTimer = null;
+const scheduleCloudPush = () => {
+  if (cloudPushTimer) clearTimeout(cloudPushTimer);
+  cloudPushTimer = setTimeout(async () => {
+    try {
+      const full = getFullExportDataset();
+      await pushCloudDataset(full);
+    } catch (err) {
+      console.warn('[CloudSync] Auto cloud sync background error:', err);
+    }
+  }, 1200);
+};
+
 // Helper functions for LocalStorage
 const getStored = (key, fallback) => {
   try {
@@ -589,6 +623,9 @@ const setStored = (key, value) => {
   try {
     localStorage.setItem(key, JSON.stringify(value));
     notifySubscribersDebounced(key, value, true);
+    if (key !== STORAGE_KEYS.AUTH && key !== STORAGE_KEYS.MESSAGES) {
+      scheduleCloudPush();
+    }
   } catch (e) {
     console.error(`Error writing ${key}:`, e);
   }
@@ -815,6 +852,65 @@ export const dbService = {
   isAdminAuthenticated: () => {
     const auth = getStored(STORAGE_KEYS.AUTH, null);
     return auth && auth.authenticated === true;
+  },
+
+  // Cloud Database Synchronization
+  getCloudConfig: () => getCloudConfig(),
+  saveCloudConfig: (cfg) => saveCloudConfig(cfg),
+  subscribeCloudStatus: (cb) => subscribeCloudStatus(cb),
+
+  syncToCloudNow: async () => {
+    const full = getFullExportDataset();
+    return await pushCloudDataset(full);
+  },
+
+  syncFromCloudNow: async () => {
+    try {
+      const data = await fetchCloudDataset();
+      if (!data) return false;
+
+      let changed = false;
+      if (data.appSettings && typeof data.appSettings === 'object') {
+        localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(data.appSettings));
+        changed = true;
+      }
+      if (data.features && Array.isArray(data.features)) {
+        localStorage.setItem(STORAGE_KEYS.FEATURES, JSON.stringify(data.features));
+        changed = true;
+      }
+      if (data.stats && Array.isArray(data.stats)) {
+        localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(data.stats));
+        changed = true;
+      }
+      if (data.subjects && Array.isArray(data.subjects) && data.subjects.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(data.subjects));
+        changed = true;
+      }
+      if (data.teachers && Array.isArray(data.teachers) && data.teachers.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.TEACHERS, JSON.stringify(data.teachers));
+        changed = true;
+      }
+      if (data.videos && Array.isArray(data.videos) && data.videos.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.VIDEOS, JSON.stringify(data.videos));
+        changed = true;
+      }
+      if (data.gallery && Array.isArray(data.gallery) && data.gallery.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(data.gallery));
+        changed = true;
+      }
+      if (data.testimonials && Array.isArray(data.testimonials) && data.testimonials.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.TESTIMONIALS, JSON.stringify(data.testimonials));
+        changed = true;
+      }
+
+      if (changed) {
+        notifySubscribersDebounced('cloud_sync', data, true);
+      }
+      return true;
+    } catch (e) {
+      console.warn('[CloudSync] Sync from cloud error:', e);
+      return false;
+    }
   },
 
   // Reset function

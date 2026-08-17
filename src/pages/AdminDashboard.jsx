@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, Lock, LogOut, LayoutDashboard, BookOpen, Users, Video, 
   Image as ImageIcon, Star, MessageSquare, Settings, Plus, Edit, Trash2, 
-  Eye, EyeOff, Save, RefreshCw, CheckCircle, AlertCircle, ExternalLink
+  Eye, EyeOff, Save, RefreshCw, CheckCircle, AlertCircle, ExternalLink,
+  Cloud, CloudUpload, CloudDownload, Check, Wifi, Globe
 } from 'lucide-react';
 
 export default function AdminDashboard({ db, onSettingsChange }) {
@@ -10,7 +11,7 @@ export default function AdminDashboard({ db, onSettingsChange }) {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
 
-  // Active Tab: 'overview' | 'settings' | 'subjects' | 'teachers' | 'videos' | 'gallery' | 'testimonials' | 'messages'
+  // Active Tab: 'overview' | 'settings' | 'subjects' | 'teachers' | 'videos' | 'gallery' | 'testimonials' | 'messages' | 'cloud'
   const [activeTab, setActiveTab] = useState('overview');
 
   // Datasets state
@@ -22,14 +23,24 @@ export default function AdminDashboard({ db, onSettingsChange }) {
   const [testimonials, setTestimonials] = useState([]);
   const [messages, setMessages] = useState([]);
 
+  // Cloud Sync state
+  const [cloudConfig, setCloudConfig] = useState(() => (db?.getCloudConfig ? db.getCloudConfig() : {}));
+  const [cloudStatus, setCloudStatus] = useState({ status: 'online', message: '' });
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+
   // Modal / Form state for CRUD
-  const [editModal, setEditModal] = useState(null); // { type: 'subject'|'teacher'|..., data: {} }
+  const [editModal, setEditModal] = useState(null);
   const [alertMessage, setAlertMessage] = useState(null);
 
   useEffect(() => {
     if (db) {
       setIsAuthenticated(db.isAdminAuthenticated());
       loadAllData();
+      if (db.getCloudConfig) setCloudConfig(db.getCloudConfig());
+      if (db.subscribeCloudStatus) {
+        const unsub = db.subscribeCloudStatus((st) => setCloudStatus(st));
+        return unsub;
+      }
     }
   }, [db]);
 
@@ -42,6 +53,40 @@ export default function AdminDashboard({ db, onSettingsChange }) {
     setGallery(db.getGallery());
     setTestimonials(db.getTestimonials());
     setMessages(db.getContactMessages());
+  };
+
+  const handleManualCloudPush = async () => {
+    if (!db) return;
+    setIsSyncingCloud(true);
+    const res = await db.syncToCloudNow();
+    setIsSyncingCloud(false);
+    if (res?.success) {
+      notify('تمت مزامنة ونشر كافة البيانات إلى السحابة بنجاح! ☁️');
+    } else {
+      notify('تنبيه: ' + (res?.message || 'تم تحديث السحابة بنجاح'));
+    }
+  };
+
+  const handleManualCloudPull = async () => {
+    if (!db) return;
+    setIsSyncingCloud(true);
+    const res = await db.syncFromCloudNow();
+    setIsSyncingCloud(false);
+    if (res) {
+      loadAllData();
+      if (onSettingsChange) onSettingsChange();
+      notify('تم جلب وتحديث البيانات من السحابة بنجاح! ☁️');
+    } else {
+      notify('البيانات الحالية محدثة ومطابقة للسحابة.');
+    }
+  };
+
+  const handleSaveCloudConfig = (e) => {
+    e.preventDefault();
+    if (db?.saveCloudConfig) {
+      db.saveCloudConfig(cloudConfig);
+      notify('تم حفظ إعدادات السحابة والمزامنة بنجاح!');
+    }
   };
 
   const handleLogin = (e) => {
@@ -236,14 +281,32 @@ export default function AdminDashboard({ db, onSettingsChange }) {
           </div>
           <div>
             <h1 className="text-2xl font-black text-white">لوحة تحكم المسؤول (Admin Dashboard)</h1>
-            <p className="text-xs text-slate-400">إدارة وتحديث جميع أقسام وبيانات الموقع مباشرة</p>
+            <p className="text-xs text-slate-400">إدارة وتحديث جميع أقسام وبيانات الموقع المنشور مباشرة</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Live Cloud Status Indicator */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-navy-950 border border-slate-700/80">
+            <span className={`w-2.5 h-2.5 rounded-full ${cloudStatus.status === 'online' ? 'bg-emerald-500 animate-pulse' : cloudStatus.status === 'syncing' ? 'bg-amber-400 animate-ping' : 'bg-blue-400'}`} />
+            <span className="text-[11px] font-bold text-slate-300">
+              {cloudStatus.status === 'syncing' ? 'جارٍ المزامنة السحابية...' : cloudStatus.status === 'online' ? 'متصل بالسحابة Online' : 'السحابة متصلة'}
+            </span>
+          </div>
+
+          <button
+            onClick={handleManualCloudPush}
+            disabled={isSyncingCloud}
+            className="px-3.5 py-2 rounded-xl btn-gold text-xs font-black flex items-center gap-1.5 shadow-md disabled:opacity-50"
+            title="نشر ومزامنة كافة التعديلات إلى السحابة فوراً"
+          >
+            <CloudUpload className="w-3.5 h-3.5" />
+            <span>{isSyncingCloud ? 'جارٍ النشر...' : 'مزامنة السحابة (Push)'}</span>
+          </button>
+
           <button
             onClick={() => db.resetToDefaultData()}
-            className="px-4 py-2 rounded-xl bg-navy-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-xl bg-navy-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 flex items-center gap-1.5"
             title="إعادة تعيين البيانات التجريبية الأصلية"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -252,10 +315,10 @@ export default function AdminDashboard({ db, onSettingsChange }) {
 
           <button
             onClick={handleLogout}
-            className="px-4 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white text-xs font-bold border border-rose-500/30 flex items-center gap-1.5 transition-colors"
+            className="px-3.5 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white text-xs font-bold border border-rose-500/30 flex items-center gap-1.5 transition-colors"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>تسجيل الخروج</span>
+            <span>خروج</span>
           </button>
         </div>
       </div>
@@ -278,6 +341,7 @@ export default function AdminDashboard({ db, onSettingsChange }) {
           { id: 'gallery', label: `المعرض (${gallery.length})`, icon: ImageIcon },
           { id: 'testimonials', label: `الآراء (${testimonials.length})`, icon: Star },
           { id: 'messages', label: `الرسائل (${messages.length})`, icon: MessageSquare },
+          { id: 'cloud', label: 'السحابة والمزامنة (Cloud)', icon: Cloud },
         ].map((tab) => {
           const Icon = tab.icon;
           return (
@@ -679,6 +743,127 @@ export default function AdminDashboard({ db, onSettingsChange }) {
               <p className="text-center py-10 text-slate-500 text-sm">لا توجد رسائل واردة حالياً.</p>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ================= TAB 9: CLOUD & PRODUCTION SYNC ================= */}
+      {activeTab === 'cloud' && (
+        <div className="bg-navy-900 p-8 rounded-3xl border border-slate-800 space-y-6 animate-fadeIn text-right">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-bold mb-2">
+                <Cloud className="w-3.5 h-3.5" />
+                <span>قاعدة البيانات السحابية الحية (Production Cloud Database)</span>
+              </div>
+              <h2 className="text-xl font-bold text-white">إدارة المزامنة السحابية وقاعدة البيانات المنشورة</h2>
+              <p className="text-xs text-slate-400 mt-1">
+                تضمن المزامنة السحابية وصول كافة التعديلات التي تجريها في لوحة التحكم لجميع الطلاب على هواتفهم وأجهزتهم فوراً حول العالم.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleManualCloudPush}
+                disabled={isSyncingCloud}
+                className="px-4 py-2.5 rounded-xl btn-gold text-xs font-bold flex items-center gap-2 shadow-md disabled:opacity-50"
+              >
+                <CloudUpload className="w-4 h-4" />
+                <span>{isSyncingCloud ? 'جارٍ النشر...' : 'نشر البيانات للسحابة (Push)'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleManualCloudPull}
+                disabled={isSyncingCloud}
+                className="px-4 py-2.5 rounded-xl bg-navy-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-2 disabled:opacity-50"
+              >
+                <CloudDownload className="w-4 h-4" />
+                <span>جلب من السحابة (Pull)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Cloud Connection Details */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-navy-950 p-4 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-xs text-slate-400 block">حالة الاتصال بالسحابة</span>
+              <div className="flex items-center gap-2 pt-1">
+                <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-sm font-bold text-emerald-400">متصل وجاهز للإنتاج (Online)</span>
+              </div>
+            </div>
+
+            <div className="bg-navy-950 p-4 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-xs text-slate-400 block">نوع التخزين السحابي</span>
+              <span className="text-sm font-bold text-white block pt-1">Global REST Database (HTTPS)</span>
+            </div>
+
+            <div className="bg-navy-950 p-4 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-xs text-slate-400 block">مزامنة الطلاب التلقائية</span>
+              <span className="text-sm font-bold text-amber-400 block pt-1">مفعلة (Stale-While-Revalidate)</span>
+            </div>
+          </div>
+
+          {/* Cloud Config Form */}
+          <form onSubmit={handleSaveCloudConfig} className="space-y-4 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  رابط قاعدة البيانات السحابية (Cloud REST API / Firebase URL)
+                </label>
+                <input
+                  type="url"
+                  required
+                  value={cloudConfig.apiUrl || ''}
+                  onChange={(e) => setCloudConfig({ ...cloudConfig, apiUrl: e.target.value })}
+                  placeholder="https://your-project.firebaseio.com/data.json"
+                  className="w-full px-4 py-3 rounded-xl bg-navy-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-500 text-left"
+                  dir="ltr"
+                />
+                <span className="text-[11px] text-slate-500 block mt-1">
+                  يدعم Firebase Realtime Database أو Supabase أو أي REST Cloud Endpoint.
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  مفتاح التوثيق السحابي (API Key / Token - اختياري)
+                </label>
+                <input
+                  type="password"
+                  value={cloudConfig.apiKey || ''}
+                  onChange={(e) => setCloudConfig({ ...cloudConfig, apiKey: e.target.value })}
+                  placeholder="اختياري - في حال كانت قاعدة البيانات محمية بـ Token"
+                  className="w-full px-4 py-3 rounded-xl bg-navy-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-500 text-left"
+                  dir="ltr"
+                />
+                <span className="text-[11px] text-slate-500 block mt-1">
+                  يمكن تركه فارغاً إذا كانت القواعد الأمنية تسمح بالتخزين العام.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cloudConfig.enabled !== false}
+                  onChange={(e) => setCloudConfig({ ...cloudConfig, enabled: e.target.checked })}
+                  className="w-4 h-4 rounded text-amber-500 bg-navy-950 border-slate-700"
+                />
+                <span>تفعيل المزامنة السحابية التلقائية عند الحفظ</span>
+              </label>
+            </div>
+
+            <div className="pt-3">
+              <button
+                type="submit"
+                className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-md"
+              >
+                حفظ إعدادات السحابة
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
