@@ -94,7 +94,7 @@ export default function Home() {
             {/* Quick Action Buttons */}
             <div className="flex flex-wrap items-center gap-3.5 pt-2">
               <a
-                href={appSettings?.googlePlayUrl || "https://github.com/shimaarafaat33-dev/AL-ASAS/releases/download/1.1.2/AL-ASAS.V1.1.2.apk"}
+                href={appSettings?.googlePlayUrl || "https://github.com/shimaarafaat33-dev/AL-ASAS/releases/download/1.1.2/AL-ASAS.V1.1.3.apk"}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-gold px-6 py-3.5 rounded-2xl flex items-center gap-3 text-sm sm:text-base font-black shadow-xl"
@@ -169,7 +169,7 @@ export default function Home() {
                   <span className="text-xs font-bold text-slate-300">النسخة المحدثة جاهزة للتحميل</span>
                 </div>
                 <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                  v1.1.2 APK
+                  v1.1.3 APK
                 </span>
               </div>
 
@@ -197,7 +197,7 @@ export default function Home() {
               {/* Instant APK Download Strip */}
               <div className="pt-2">
                 <a
-                  href={appSettings?.googlePlayUrl || "https://github.com/shimaarafaat33-dev/AL-ASAS/releases/download/1.1.2/AL-ASAS.V1.1.2.apk"}
+                  href={appSettings?.googlePlayUrl || "https://github.com/shimaarafaat33-dev/AL-ASAS/releases/download/1.1.2/AL-ASAS.V1.1.3.apk"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full btn-gold py-3 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-black text-center"
@@ -801,7 +801,7 @@ export default function Home() {
             </p>
             <div className="bg-white p-4 rounded-2xl inline-block mx-auto shadow-inner">
               <img
-                src={appSettings?.qrCodeUrl || "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https%3A%2F%2Fgithub.com%2Fshimaarafaat33-dev%2FAL-ASAS%2Freleases%2Fdownload%2F1.1.2%2FAL-ASAS.V1.1.2.apk&color=070c1b&bgcolor=ffffff"}
+                src={appSettings?.qrCodeUrl || "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https%3A%2F%2Fgithub.com%2Fshimaarafaat33-dev%2FAL-ASAS%2Freleases%2Fdownload%2F1.1.2%2FAL-ASAS.V1.1.3.apk&color=070c1b&bgcolor=ffffff"}
                 alt="QR Code"
                 className="w-48 h-48 mx-auto"
               />
